@@ -7,6 +7,16 @@
   const documentStatus = document.querySelector("#document-status");
   const copyButton = document.querySelector(".copy-action");
   const clearButton = document.querySelector(".clear-action");
+  const checkButton = document.querySelector("#check-button");
+  const checkButtonLabel = checkButton.querySelector("span");
+  const languageSelect = document.querySelector("#language-select");
+  const toneSelect = document.querySelector("#tone-select");
+  const suggestionsContent = document.querySelector(".suggestions-content");
+  const suggestionsEmpty = document.querySelector("#suggestions-empty");
+  const suggestionsEmptyTitle = document.querySelector("#suggestions-empty-title");
+  const suggestionsEmptyDescription = document.querySelector("#suggestions-empty-description");
+  const suggestionsList = document.querySelector("#suggestions-list");
+  const suggestionCount = document.querySelector("#suggestion-count");
   const settingsForm = document.querySelector("#settings-form");
   const baseUrlInput = document.querySelector("#base-url");
   const modelNameInput = document.querySelector("#model-name");
@@ -75,7 +85,7 @@
     }
   }
 
-  function getModelsEndpoint() {
+  function getApiEndpoint(path) {
     let url;
     try {
       url = new URL(baseUrlInput.value.trim());
@@ -99,8 +109,12 @@
     }
 
     const basePath = url.pathname.replace(/\/+$/, "");
-    url.pathname = `${basePath}/models`;
+    url.pathname = `${basePath}/${path}`;
     return url.href;
+  }
+
+  function getModelsEndpoint() {
+    return getApiEndpoint("models");
   }
 
   function getProviderErrorMessage(responseText) {
@@ -212,6 +226,343 @@
     }
   }
 
+  function createSystemPrompt() {
+    const language = languageSelect.value === "auto"
+      ? "Detect the input language. Write every explanation in that detected language."
+      : `Review the text using ${languageSelect.selectedOptions[0].textContent} conventions, and write every explanation in that language. Do not translate the text.`;
+
+    return [
+      "You are a careful writing checker. Review the user's text for grammar, spelling, wrong word choice, awkward or meaningless sentences, and punctuation.",
+      `Respect the selected tone: ${toneSelect.value}. Keep the author's meaning and voice; suggest only useful corrections.`,
+      language,
+      "Return STRICT valid JSON only. Do not return markdown, code fences, or any text outside the JSON object.",
+      "Use exactly this structure:",
+      '{"detected_language":"en","suggestions":[{"id":1,"category":"grammar","original":"exact substring","replacement":"corrected version","explanation":"short explanation in detected language","start":0,"end":10}]}',
+      'Each category must be exactly "grammar", "clarity", or "punctuation".',
+      "Use grammar for grammar, spelling, and incorrect word choice; clarity for awkward or meaningless sentences; punctuation for punctuation.",
+      "Use unique integer IDs. The original must be an exact substring of the user's text.",
+      "start is the zero-based inclusive offset and end is the zero-based exclusive offset, measured in UTF-16 code units in the original text.",
+      "Do not overlap suggestions. If no corrections are needed, return an empty suggestions array.",
+      "If Auto-detect is selected, detected_language must be the detected language's ISO 639-1 code. Otherwise use the selected language's ISO 639-1 code."
+    ].join("\n");
+  }
+
+  function extractJsonObject(text) {
+    let start = -1;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+      const character = text[index];
+      if (start < 0) {
+        if (character === "{") {
+          start = index;
+          depth = 1;
+        }
+        continue;
+      }
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (character === "\\") {
+          escaped = true;
+        } else if (character === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (character === '"') {
+        inString = true;
+      } else if (character === "{") {
+        depth += 1;
+      } else if (character === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          return text.slice(start, index + 1);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function parseSuggestions(content, sourceText) {
+    let payload;
+    let recovered = false;
+
+    try {
+      payload = JSON.parse(content);
+    } catch {
+      const jsonObject = extractJsonObject(content);
+      if (!jsonObject) {
+        throw new Error("The model response did not contain a valid JSON object.");
+      }
+      try {
+        payload = JSON.parse(jsonObject);
+        recovered = true;
+      } catch {
+        throw new Error("Could not recover valid JSON from the model response.");
+      }
+    }
+
+    if (
+      !payload
+      || typeof payload.detected_language !== "string"
+      || !Array.isArray(payload.suggestions)
+    ) {
+      throw new Error("The model response is missing detected_language or the suggestions array.");
+    }
+
+    const categories = ["grammar", "clarity", "punctuation"];
+    const validSuggestions = [];
+    let skippedCount = 0;
+
+    payload.suggestions.forEach((suggestion) => {
+      if (
+        !suggestion
+        || !Number.isInteger(suggestion.id)
+        || !categories.includes(suggestion.category)
+        || typeof suggestion.original !== "string"
+        || typeof suggestion.replacement !== "string"
+        || typeof suggestion.explanation !== "string"
+        || !Number.isInteger(suggestion.start)
+        || !Number.isInteger(suggestion.end)
+        || suggestion.start < 0
+        || suggestion.end < suggestion.start
+        || suggestion.end > sourceText.length
+        || sourceText.slice(suggestion.start, suggestion.end) !== suggestion.original
+      ) {
+        skippedCount += 1;
+        return;
+      }
+      validSuggestions.push(suggestion);
+    });
+
+    return {
+      detectedLanguage: payload.detected_language,
+      suggestions: validSuggestions,
+      skippedCount,
+      recovered
+    };
+  }
+
+  function renderSuggestions(suggestions) {
+    suggestionsList.replaceChildren();
+    suggestionCount.textContent = String(suggestions.length);
+
+    if (suggestions.length === 0) {
+      suggestionsEmpty.hidden = false;
+      suggestionsList.hidden = true;
+      suggestionsContent.classList.remove("has-suggestions");
+      suggestionsEmptyTitle.textContent = "No suggestions found";
+      suggestionsEmptyDescription.textContent = "Your text looks good as written.";
+      return;
+    }
+
+    suggestionsEmpty.hidden = true;
+    suggestionsList.hidden = false;
+    suggestionsContent.classList.add("has-suggestions");
+
+    suggestions.forEach((suggestion) => {
+      const item = document.createElement("li");
+      item.className = "suggestion-card";
+
+      const heading = document.createElement("div");
+      heading.className = "suggestion-card-heading";
+      const category = document.createElement("span");
+      category.className = `suggestion-category suggestion-category-${suggestion.category}`;
+      category.textContent = suggestion.category;
+      heading.append(category);
+
+      const textPair = document.createElement("div");
+      textPair.className = "suggestion-text-pair";
+      const originalLabel = document.createElement("span");
+      originalLabel.textContent = "Original";
+      const original = document.createElement("p");
+      original.className = "suggestion-original";
+      original.textContent = suggestion.original;
+      const replacementLabel = document.createElement("span");
+      replacementLabel.textContent = "Suggestion";
+      const replacement = document.createElement("p");
+      replacement.className = "suggestion-replacement";
+      replacement.textContent = suggestion.replacement;
+      textPair.append(originalLabel, original, replacementLabel, replacement);
+
+      const explanation = document.createElement("p");
+      explanation.className = "suggestion-explanation";
+      explanation.textContent = suggestion.explanation;
+      item.append(heading, textPair, explanation);
+      suggestionsList.append(item);
+    });
+  }
+
+  function resetSuggestions() {
+    suggestionsList.replaceChildren();
+    suggestionCount.textContent = "0";
+    suggestionsEmpty.hidden = false;
+    suggestionsList.hidden = true;
+    suggestionsContent.classList.remove("has-suggestions");
+    suggestionsEmptyTitle.textContent = "Nothing to suggest — yet";
+    suggestionsEmptyDescription.textContent = "Your writing suggestions will show up here once you start.";
+  }
+
+  async function checkText() {
+    const text = getEditorText();
+    if (!text.trim()) {
+      showToast("Write or paste some text before checking.", "error");
+      editor.focus();
+      return;
+    }
+
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) {
+      showToast("Enter an API key before checking.", "error");
+      apiKeyInput.focus();
+      return;
+    }
+
+    const model = modelNameInput.value.trim();
+    if (!model) {
+      showToast("Enter a model name before checking.", "error");
+      modelNameInput.focus();
+      return;
+    }
+
+    let endpoint;
+    try {
+      endpoint = getApiEndpoint("chat/completions");
+    } catch (error) {
+      showToast(error.message, "error");
+      baseUrlInput.focus();
+      return;
+    }
+
+    checkButton.disabled = true;
+    checkButton.classList.add("is-loading");
+    checkButtonLabel.textContent = "Checking…";
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 45000);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: createSystemPrompt() },
+            { role: "user", content: text }
+          ],
+          temperature: 0.2,
+          response_format: { type: "json_object" }
+        }),
+        cache: "no-store",
+        credentials: "omit",
+        redirect: "error",
+        signal: controller.signal
+      });
+
+      const responseText = await response.text();
+      if (!response.ok) {
+        const providerMessage = getProviderErrorMessage(responseText);
+        if (response.status === 401) {
+          showToast(
+            providerMessage
+              ? `Invalid API key (401): ${providerMessage}`
+              : "Invalid API key (401).",
+            "error"
+          );
+        } else if (response.status === 404) {
+          showToast(
+            providerMessage
+              ? `Base URL or /chat/completions endpoint not found (404): ${providerMessage}`
+              : "Base URL or /chat/completions endpoint not found (404).",
+            "error"
+          );
+        } else {
+          showToast(
+            providerMessage
+              ? `Provider error (${response.status}): ${providerMessage}`
+              : `Provider returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}.`,
+            "error"
+          );
+        }
+        return;
+      }
+
+      let providerResponse;
+      try {
+        providerResponse = JSON.parse(responseText);
+      } catch {
+        throw new Error("The provider returned an invalid response.");
+      }
+
+      const choices = providerResponse && providerResponse.choices;
+      const message = Array.isArray(choices) && choices[0] && choices[0].message;
+      let content = message && message.content;
+      if (Array.isArray(content)) {
+        content = content
+          .filter((part) => part && typeof part.text === "string")
+          .map((part) => part.text)
+          .join("");
+      }
+      if (typeof content !== "string") {
+        throw new Error("The provider response did not include assistant text.");
+      }
+
+      const result = parseSuggestions(content, text);
+      if (getEditorText() !== text) {
+        showToast("Text changed while checking. Run Check again to review the latest version.", "error");
+        return;
+      }
+      renderSuggestions(result.suggestions);
+      console.log("ClearKey suggestions:", {
+        detected_language: result.detectedLanguage,
+        suggestions: result.suggestions
+      });
+
+      if (result.recovered) {
+        console.warn("ClearKey recovered a JSON object from surrounding model response text.");
+      }
+      if (result.skippedCount > 0) {
+        const label = result.skippedCount === 1 ? "suggestion was" : "suggestions were";
+        showToast(`${result.skippedCount} malformed ${label} skipped.`, "error");
+      } else {
+        const countLabel = result.suggestions.length === 1 ? "suggestion" : "suggestions";
+        showToast(
+          result.suggestions.length > 0
+            ? `${result.suggestions.length} ${countLabel} found.`
+            : "No suggestions found.",
+          "success"
+        );
+      }
+    } catch (error) {
+      if (error.name === "AbortError") {
+        showToast("Check timed out. Try again or verify the provider endpoint.", "error");
+      } else if (error instanceof TypeError) {
+        showToast(
+          `Network/CORS error: ${error.message || "Could not reach the provider."} Check the URL, connection, and provider CORS settings.`,
+          "error"
+        );
+      } else {
+        console.error("ClearKey could not complete the text check.", error);
+        showToast(error.message || "The text check could not be completed.", "error");
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      checkButton.disabled = false;
+      checkButton.classList.remove("is-loading");
+      checkButtonLabel.textContent = "Check";
+    }
+  }
+
   settingsForm.addEventListener("submit", (event) => {
     event.preventDefault();
     saveSettings();
@@ -231,10 +582,16 @@
     toggleApiKeyButton.querySelector(".eye-off-icon").hidden = !shouldShowKey;
   });
 
+  checkButton.addEventListener("click", checkText);
+
   loadSettings();
 
   function getEditorText() {
-    return editor.innerText.replace(/\r\n?/g, "\n");
+    const text = editor.innerText.replace(/\r\n?/g, "\n");
+    if ((!editor.textContent && !text.trim()) || editor.innerHTML === "\n") {
+      return "";
+    }
+    return text;
   }
 
   function setStatus(message) {
@@ -365,6 +722,7 @@
 
   editor.addEventListener("input", () => {
     updateCounts();
+    resetSuggestions();
     setStatus("Unsaved changes");
   });
 
