@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f8fb">
+    <meta name="description" content="ClearKey — your key, your model, your words.">
+    <title>ClearKey — Your words, your way</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="ClearKey home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path d="M16 3.5 27 9.8v12.4L16 28.5 5 22.2V9.8L16 3.5Z" fill="currentColor" opacity=".14"/>
+              <path d="M20.75 12.5a6.25 6.25 0 1 0 .1 7.6L18.6 18a3.25 3.25 0 1 1 0-3.4l2.15-2.1Z" fill="currentColor"/>
+              <path d="M20 17h7m-2.5 0v2.5M23 17v2" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-name">ClearKey</span>
+            <span class="brand-tagline">Your key. Your model. Your words.</span>
+          </span>
+        </a>
+        <div class="topbar-right">
+          <span class="privacy-chip"><span class="privacy-dot"></span> Private by design</span>
+          <button class="avatar-button" type="button" aria-label="Profile">K</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="side-panel settings-panel" aria-labelledby="settings-heading">
+          <div class="panel-heading">
+            <div class="panel-title-wrap">
+              <span class="panel-icon settings-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="m16.1 11.2 1.1.8-1.5 2.6-1.3-.5a6.6 6.6 0 0 1-1.2.7l-.2 1.4H7l-.2-1.4a6.6 6.6 0 0 1-1.2-.7l-1.3.5-1.5-2.6 1.1-.8a6.5 6.5 0 0 1 0-1.4l-1.1-.8 1.5-2.6 1.3.5a6.6 6.6 0 0 1 1.2-.7L7 4.8h6l.2 1.4a6.6 6.6 0 0 1 1.2.7l1.3-.5 1.5 2.6-1.1.8a6.5 6.5 0 0 1 0 1.4Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <h2 id="settings-heading">Settings</h2>
+            </div>
+            <span class="soon-badge">SOON</span>
+          </div>
+          <div class="empty-state settings-empty">
+            <span class="empty-illustration settings-illustration" aria-hidden="true">
+              <svg viewBox="0 0 64 64" fill="none">
+                <rect x="11" y="13" width="42" height="38" rx="9" fill="#F2F5FB" stroke="#DCE3EF" stroke-width="1.5"/>
+                <path d="M23 26h18M23 33h11M23 40h15" stroke="#A8B5C9" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="45" cy="43" r="8" fill="#E8F7F1" stroke="#BFE9D8" stroke-width="1.5"/>
+                <path d="m42 43 2 2 4-4" stroke="#21A779" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <h3>Your space, your rules</h3>
+            <p>Personalize your writing setup. Settings are on their way.</p>
+            <span class="progress-label">IN DEVELOPMENT <span>·</span> 01</span>
+          </div>
+          <div class="sidebar-bottom">
+            <span class="sidebar-tip-icon" aria-hidden="true">✦</span>
+            <p>Good writing starts with a clear mind.</p>
+          </div>
+        </aside>
+
+        <section class="editor-column" aria-label="Writing editor">
+          <div class="editor-toolbar">
+            <div class="toolbar-selects">
+              <label class="select-control">
+                <span class="sr-only">Language</span>
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M3.5 10h13M10 3c1.8 1.9 2.7 4.2 2.7 7s-.9 5.1-2.7 7c-1.8-1.9-2.7-4.2-2.7-7S8.2 4.9 10 3Z" stroke="currentColor" stroke-width="1.3"/>
+                </svg>
+                <select aria-label="Language">
+                  <option>English (US)</option>
+                </select>
+                <svg class="chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </label>
+              <span class="toolbar-divider" aria-hidden="true"></span>
+              <label class="select-control tone-select">
+                <span class="tone-sparkle" aria-hidden="true">✳</span>
+                <span class="sr-only">Tone</span>
+                <select aria-label="Tone">
+                  <option>Choose a tone</option>
+                </select>
+                <svg class="chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </label>
+            </div>
+            <div class="toolbar-actions">
+              <label class="autocheck-control">
+                <span>Auto-check</span>
+                <input type="checkbox" aria-label="Auto-check">
+                <span class="toggle" aria-hidden="true"></span>
+              </label>
+              <button class="check-button" type="button">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 10.5 3.3 3.3L15.5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Check
+              </button>
+            </div>
+          </div>
+
+          <div class="document-card">
+            <div class="document-meta">
+              <div class="document-name">
+                <span class="document-dot" aria-hidden="true"></span>
+                <span>Untitled document</span>
+                <svg class="edit-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m10.8 3.2 2 2M3 13l2.9-.6 7.5-7.5a1.4 1.4 0 0 0-2-2l-7.5 7.5L3 13Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <span class="saved-status"><span></span> All changes saved</span>
+            </div>
+            <div class="writing-area">
+              <div class="writing-heading">
+                <p class="eyebrow">YOUR CANVAS</p>
+                <span class="keyboard-hint">Start typing <kbd>⌘</kbd><kbd>↵</kbd></span>
+              </div>
+              <label class="sr-only" for="writing-input">Your text</label>
+              <textarea id="writing-input" placeholder="Start writing something great..." spellcheck="false"></textarea>
+              <div class="editor-watermark" aria-hidden="true">
+                <span class="watermark-mark">C</span>
+                <span>Write freely. We’ll help you polish it.</span>
+              </div>
+            </div>
+            <div class="document-footer">
+              <div class="word-count"><span class="word-count-icon" aria-hidden="true">≡</span><strong>0</strong> words <span class="count-divider"></span> 0 characters</div>
+              <div class="document-actions">
+                <button class="text-action" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="6" width="9" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M13 6V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v9A1.5 1.5 0 0 0 4.5 15H7" stroke="currentColor" stroke-width="1.5"/></svg>
+                  Copy
+                </button>
+                <span class="action-divider" aria-hidden="true"></span>
+                <button class="text-action clear-action" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2m3 0-.7 10H5.7L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 9v4m3-4v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="editor-hint"><span class="hint-sparkle" aria-hidden="true">✦</span> Your words stay yours. Always.</div>
+        </section>
+
+        <aside class="side-panel suggestions-panel" aria-labelledby="suggestions-heading">
+          <div class="panel-heading">
+            <div class="panel-title-wrap">
+              <span class="panel-icon suggestions-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <path d="M10 2.8v2.4m0 9.6v2.4m7.2-7.2h-2.4m-9.6 0H2.8m12.3-5.1-1.7 1.7m-6.8 6.8-1.7 1.7m10.2 0-1.7-1.7m-6.8-6.8L4.9 4.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <circle cx="10" cy="10" r="3.3" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+              </span>
+              <h2 id="suggestions-heading">Suggestions</h2>
+            </div>
+            <span class="suggestion-count">0</span>
+          </div>
+          <div class="suggestions-content">
+            <div class="suggestions-empty">
+              <span class="suggestion-illustration" aria-hidden="true">
+                <svg viewBox="0 0 88 88" fill="none">
+                  <circle cx="44" cy="44" r="31" fill="#F4F7FC"/>
+                  <path d="M44 21.5c-10 0-18 7.7-18 17.3 0 6 3.2 11.2 8 14.3v5.7h20v-5.7c4.8-3.1 8-8.3 8-14.3 0-9.6-8-17.3-18-17.3Z" fill="#fff" stroke="#DCE4F1" stroke-width="1.5"/>
+                  <path d="M36 64h16m-14-5h12m-7-26v17m-7-11 7 7 7-7" stroke="#9DAEC6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="m19 34 3 1m43 0 3-1M31 19l2 3m22-3-2 3" stroke="#C0CDE0" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <h3>Nothing to suggest <span>— yet</span></h3>
+              <p>Your writing suggestions will show up here once you start.</p>
+              <div class="suggestion-tip">
+                <span class="tip-lightbulb" aria-hidden="true">✦</span>
+                <p><strong>A little tip</strong>Clear, concise writing makes every word count.</p>
+              </div>
+            </div>
+          </div>
+          <div class="suggestions-footer"><span class="footer-shield" aria-hidden="true">◇</span> Your text is never stored</div>
+        </aside>
+      </main>
+
+      <footer class="privacy-banner">
+        <span class="banner-lock" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none"><rect x="4" y="8.5" width="12" height="8.5" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 8.5V6a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="12.5" r="1" fill="currentColor"/></svg>
+        </span>
+        <span><strong>Your API key never leaves your browser.</strong> We have no servers.</span>
+        <span class="banner-separator" aria-hidden="true"></span>
+        <span class="banner-status"><span></span> End-to-end private</span>
+        <a href="#" class="learn-link">Learn more <span aria-hidden="true">↗</span></a>
+      </footer>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>
