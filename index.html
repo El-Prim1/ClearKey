@@ -211,6 +211,14 @@
             </div>
           </div>
           <div class="editor-hint"><span class="hint-sparkle" aria-hidden="true">✦</span> Your words stay yours. Always.</div>
+          <div class="suggestion-legend" aria-label="Suggestion colors and issue count">
+            <div class="legend-items">
+              <span><i class="legend-swatch legend-grammar"></i>Grammar</span>
+              <span><i class="legend-swatch legend-clarity"></i>Clarity</span>
+              <span><i class="legend-swatch legend-punctuation"></i>Punctuation</span>
+            </div>
+            <span class="legend-total"><strong id="issue-count">0</strong> issues</span>
+          </div>
         </section>
 
         <aside class="side-panel suggestions-panel" aria-labelledby="suggestions-heading">
@@ -243,6 +251,10 @@
                 <p><strong>A little tip</strong>Clear, concise writing makes every word count.</p>
               </div>
             </div>
+            <div class="suggestion-bulk-actions" id="suggestion-bulk-actions" hidden>
+              <button type="button" class="apply-all-button">Apply All</button>
+              <button type="button" class="ignore-all-button">Ignore All</button>
+            </div>
             <ul class="suggestions-list" id="suggestions-list" aria-live="polite" hidden></ul>
           </div>
           <div class="suggestions-footer"><span class="footer-shield" aria-hidden="true">◇</span> Your text stays in this browser</div>
@@ -259,6 +271,7 @@
         <a href="#" class="learn-link">Learn more <span aria-hidden="true">↗</span></a>
       </footer>
     </div>
+    <div class="suggestion-popup" id="suggestion-popup" role="dialog" aria-label="Suggestion details" hidden></div>
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
     <script src="app.js"></script>
   </body>

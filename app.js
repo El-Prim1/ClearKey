@@ -17,6 +17,9 @@
   const suggestionsEmptyDescription = document.querySelector("#suggestions-empty-description");
   const suggestionsList = document.querySelector("#suggestions-list");
   const suggestionCount = document.querySelector("#suggestion-count");
+  const issueCount = document.querySelector("#issue-count");
+  const suggestionBulkActions = document.querySelector("#suggestion-bulk-actions");
+  const suggestionPopup = document.querySelector("#suggestion-popup");
   const settingsForm = document.querySelector("#settings-form");
   const baseUrlInput = document.querySelector("#base-url");
   const modelNameInput = document.querySelector("#model-name");
@@ -28,6 +31,8 @@
   let storageErrorLogged = false;
   let settingsSaveErrorLogged = false;
   let toastTimer = 0;
+  let activeSuggestions = [];
+  let popupAnchor = null;
 
   function showToast(message, type) {
     window.clearTimeout(toastTimer);
@@ -320,7 +325,7 @@
     const validSuggestions = [];
     let skippedCount = 0;
 
-    payload.suggestions.forEach((suggestion) => {
+    payload.suggestions.forEach((suggestion, index) => {
       if (
         !suggestion
         || !Number.isInteger(suggestion.id)
@@ -338,7 +343,7 @@
         skippedCount += 1;
         return;
       }
-      validSuggestions.push(suggestion);
+      validSuggestions.push({ ...suggestion, key: `suggestion-${index}` });
     });
 
     return {
@@ -349,9 +354,85 @@
     };
   }
 
+  function appendTextWithBreaks(container, text) {
+    const lines = text.split("\n");
+    lines.forEach((line, index) => {
+      if (index > 0) {
+        container.append(document.createElement("br"));
+      }
+      if (line) {
+        container.append(document.createTextNode(line));
+      }
+    });
+  }
+
+  function renderEditorHighlights(text, suggestions) {
+    editor.replaceChildren();
+    const points = new Set([0, text.length]);
+    suggestions.forEach((suggestion) => {
+      points.add(suggestion.start);
+      points.add(suggestion.end);
+    });
+    const offsets = Array.from(points).sort((left, right) => left - right);
+
+    offsets.forEach((start, index) => {
+      const insertionSuggestions = suggestions.filter(
+        (suggestion) => suggestion.start === start && suggestion.end === start
+      );
+      insertionSuggestions.forEach((suggestion) => {
+        const marker = document.createElement("span");
+        marker.className = `suggestion-highlight suggestion-highlight-${suggestion.category} suggestion-insertion-marker`;
+        marker.dataset.suggestionKeys = JSON.stringify([suggestion.key]);
+        marker.setAttribute("aria-label", `${suggestion.category} suggestion`);
+        editor.append(marker);
+      });
+
+      if (index === offsets.length - 1) {
+        return;
+      }
+
+      const end = offsets[index + 1];
+      if (end <= start) {
+        return;
+      }
+      const segment = text.slice(start, end);
+      const overlapping = suggestions.filter(
+        (suggestion) => suggestion.start < end && suggestion.end > start
+      );
+      if (overlapping.length === 0) {
+        appendTextWithBreaks(editor, segment);
+        return;
+      }
+
+      const highlight = document.createElement("span");
+      highlight.className = `suggestion-highlight suggestion-highlight-${overlapping[0].category}`;
+      highlight.dataset.suggestionKeys = JSON.stringify(overlapping.map((suggestion) => suggestion.key));
+      appendTextWithBreaks(highlight, segment);
+      editor.append(highlight);
+    });
+
+    editor.dataset.empty = String(text.length === 0);
+  }
+
+  function clearEditorHighlights() {
+    Array.from(editor.querySelectorAll(".suggestion-highlight")).forEach((highlight) => {
+      if (highlight.classList.contains("suggestion-insertion-marker")) {
+        highlight.remove();
+        return;
+      }
+      const parent = highlight.parentNode;
+      while (highlight.firstChild) {
+        parent.insertBefore(highlight.firstChild, highlight);
+      }
+      parent.removeChild(highlight);
+    });
+  }
+
   function renderSuggestions(suggestions) {
     suggestionsList.replaceChildren();
     suggestionCount.textContent = String(suggestions.length);
+    issueCount.textContent = String(suggestions.length);
+    suggestionBulkActions.hidden = suggestions.length === 0;
 
     if (suggestions.length === 0) {
       suggestionsEmpty.hidden = false;
@@ -376,6 +457,9 @@
       category.className = `suggestion-category suggestion-category-${suggestion.category}`;
       category.textContent = suggestion.category;
       heading.append(category);
+      const suggestionId = document.createElement("small");
+      suggestionId.textContent = `#${suggestion.id}`;
+      heading.append(suggestionId);
 
       const textPair = document.createElement("div");
       textPair.className = "suggestion-text-pair";
@@ -400,13 +484,283 @@
   }
 
   function resetSuggestions() {
+    activeSuggestions = [];
+    clearEditorHighlights();
+    closeSuggestionPopup();
     suggestionsList.replaceChildren();
     suggestionCount.textContent = "0";
+    issueCount.textContent = "0";
+    suggestionBulkActions.hidden = true;
     suggestionsEmpty.hidden = false;
     suggestionsList.hidden = true;
     suggestionsContent.classList.remove("has-suggestions");
     suggestionsEmptyTitle.textContent = "Nothing to suggest — yet";
     suggestionsEmptyDescription.textContent = "Your writing suggestions will show up here once you start.";
+  }
+
+  function closeSuggestionPopup() {
+    suggestionPopup.hidden = true;
+    popupAnchor = null;
+  }
+
+  function positionSuggestionPopup() {
+    if (suggestionPopup.hidden || !popupAnchor || !popupAnchor.isConnected) {
+      return;
+    }
+
+    const anchorRect = popupAnchor.getBoundingClientRect();
+    const popupRect = suggestionPopup.getBoundingClientRect();
+    const margin = 12;
+    let left = Math.min(anchorRect.left, window.innerWidth - popupRect.width - margin);
+    left = Math.max(margin, left);
+
+    let top = anchorRect.bottom + 8;
+    if (top + popupRect.height > window.innerHeight - margin) {
+      top = anchorRect.top - popupRect.height - 8;
+    }
+    top = Math.max(margin, Math.min(top, window.innerHeight - popupRect.height - margin));
+
+    suggestionPopup.style.left = `${left}px`;
+    suggestionPopup.style.top = `${top}px`;
+  }
+
+  function createPopupAction(label, action, key, className) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.dataset.popupAction = action;
+    if (key) {
+      button.dataset.suggestionKey = key;
+    }
+    button.textContent = label;
+    return button;
+  }
+
+  function openSuggestionPopup(highlight) {
+    let keys;
+    try {
+      keys = JSON.parse(highlight.dataset.suggestionKeys);
+    } catch {
+      return;
+    }
+    const suggestions = activeSuggestions.filter((suggestion) => keys.includes(suggestion.key));
+    if (suggestions.length === 0) {
+      return;
+    }
+
+    suggestionPopup.replaceChildren();
+    popupAnchor = highlight;
+
+    suggestions.forEach((suggestion) => {
+      const card = document.createElement("section");
+      card.className = "popup-suggestion";
+
+      const heading = document.createElement("div");
+      heading.className = "popup-suggestion-heading";
+      const category = document.createElement("span");
+      category.className = `suggestion-category suggestion-category-${suggestion.category}`;
+      category.textContent = suggestion.category;
+      const title = document.createElement("strong");
+      title.textContent = `Suggestion #${suggestion.id}`;
+      heading.append(category, title);
+
+      const explanation = document.createElement("p");
+      explanation.className = "popup-explanation";
+      explanation.textContent = suggestion.explanation;
+
+      const originalReplacement = document.createElement("p");
+      originalReplacement.className = "popup-original-replacement";
+      const original = document.createElement("span");
+      original.className = "popup-original";
+      original.textContent = suggestion.original || "(insert)";
+      const arrow = document.createElement("span");
+      arrow.className = "popup-arrow";
+      arrow.setAttribute("aria-hidden", "true");
+      arrow.textContent = "→";
+      const replacement = document.createElement("span");
+      replacement.className = "popup-replacement";
+      replacement.textContent = suggestion.replacement || "(delete)";
+      originalReplacement.append(original, arrow, replacement);
+
+      const actions = document.createElement("div");
+      actions.className = "popup-actions";
+      actions.append(
+        createPopupAction("Apply", "apply", suggestion.key, "apply-suggestion-button"),
+        createPopupAction("Ignore", "ignore", suggestion.key, "ignore-suggestion-button")
+      );
+      card.append(heading, explanation, originalReplacement, actions);
+      suggestionPopup.append(card);
+    });
+
+    const dismissRow = document.createElement("div");
+    dismissRow.className = "popup-dismiss-row";
+    dismissRow.append(createPopupAction("Dismiss", "dismiss", "", "popup-dismiss"));
+    suggestionPopup.append(dismissRow);
+    suggestionPopup.hidden = false;
+    positionSuggestionPopup();
+  }
+
+  function setCaretAtTextOffset(offset) {
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+
+    let consumed = 0;
+    let targetNode = null;
+    let targetOffset = 0;
+
+    function findPosition(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const length = node.nodeValue.length;
+        if (offset <= consumed + length) {
+          targetNode = node;
+          targetOffset = Math.max(0, offset - consumed);
+          return true;
+        }
+        consumed += length;
+        return false;
+      }
+
+      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === "BR") {
+        const parent = node.parentNode;
+        const index = Array.prototype.indexOf.call(parent.childNodes, node);
+        if (offset === consumed) {
+          targetNode = parent;
+          targetOffset = index;
+          return true;
+        }
+        consumed += 1;
+        if (offset === consumed) {
+          targetNode = parent;
+          targetOffset = index + 1;
+          return true;
+        }
+        return false;
+      }
+
+      for (const child of node.childNodes) {
+        if (findPosition(child)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    findPosition(editor);
+    const range = document.createRange();
+    if (targetNode) {
+      range.setStart(targetNode, targetOffset);
+    } else {
+      range.selectNodeContents(editor);
+      range.collapse(false);
+    }
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function suggestionsOverlap(first, second) {
+    if (first.start === first.end && second.start === second.end) {
+      return first.start === second.start;
+    }
+    if (first.start === first.end) {
+      return first.start > second.start && first.start < second.end;
+    }
+    if (second.start === second.end) {
+      return second.start > first.start && second.start < first.end;
+    }
+    return first.start < second.end && second.start < first.end;
+  }
+
+  function applySuggestion(key, notify = true) {
+    const suggestion = activeSuggestions.find((item) => item.key === key);
+    if (!suggestion) {
+      return false;
+    }
+
+    const text = getEditorText();
+    if (text.slice(suggestion.start, suggestion.end) !== suggestion.original) {
+      resetSuggestions();
+      showToast("This suggestion no longer matches the text. Run Check again.", "error");
+      return false;
+    }
+
+    const updatedText = text.slice(0, suggestion.start)
+      + suggestion.replacement
+      + text.slice(suggestion.end);
+    const offsetChange = suggestion.replacement.length - (suggestion.end - suggestion.start);
+    const remaining = [];
+
+    activeSuggestions.forEach((other) => {
+      if (other.key === suggestion.key || suggestionsOverlap(suggestion, other)) {
+        return;
+      }
+      if (other.end <= suggestion.start) {
+        remaining.push(other);
+      } else if (other.start >= suggestion.end) {
+        remaining.push({
+          ...other,
+          start: other.start + offsetChange,
+          end: other.end + offsetChange
+        });
+      }
+    });
+
+    closeSuggestionPopup();
+    activeSuggestions = remaining;
+    renderEditorHighlights(updatedText, remaining);
+    updateCounts();
+    renderSuggestions(remaining);
+    saveDocument();
+    setCaretAtTextOffset(suggestion.start + suggestion.replacement.length);
+    if (notify) {
+      showToast("Suggestion applied.", "success");
+    }
+    return true;
+  }
+
+  function ignoreSuggestion(key, notify = true) {
+    if (!activeSuggestions.some((suggestion) => suggestion.key === key)) {
+      return false;
+    }
+
+    closeSuggestionPopup();
+    activeSuggestions = activeSuggestions.filter((suggestion) => suggestion.key !== key);
+    renderEditorHighlights(getEditorText(), activeSuggestions);
+    renderSuggestions(activeSuggestions);
+    if (notify) {
+      showToast("Suggestion ignored.", "success");
+    }
+    return true;
+  }
+
+  function applyAllSuggestions() {
+    const keys = activeSuggestions
+      .slice()
+      .sort((left, right) => right.start - left.start || right.end - left.end)
+      .map((suggestion) => suggestion.key);
+    let appliedCount = 0;
+    keys.forEach((key) => {
+      if (applySuggestion(key, false)) {
+        appliedCount += 1;
+      }
+    });
+    closeSuggestionPopup();
+    const suggestionLabel = appliedCount === 1 ? "suggestion" : "suggestions";
+    showToast(
+      appliedCount > 0 ? `${appliedCount} ${suggestionLabel} applied.` : "No suggestions were applied.",
+      appliedCount > 0 ? "success" : "error"
+    );
+  }
+
+  function ignoreAllSuggestions() {
+    closeSuggestionPopup();
+    activeSuggestions = [];
+    renderEditorHighlights(getEditorText(), activeSuggestions);
+    renderSuggestions(activeSuggestions);
+    showToast("All suggestions ignored.", "success");
   }
 
   async function checkText() {
@@ -522,10 +876,14 @@
         showToast("Text changed while checking. Run Check again to review the latest version.", "error");
         return;
       }
-      renderSuggestions(result.suggestions);
+      closeSuggestionPopup();
+      activeSuggestions = result.suggestions;
+      renderEditorHighlights(text, activeSuggestions);
+      updateCounts();
+      renderSuggestions(activeSuggestions);
       console.log("ClearKey suggestions:", {
         detected_language: result.detectedLanguage,
-        suggestions: result.suggestions
+        suggestions: activeSuggestions
       });
 
       if (result.recovered) {
@@ -726,6 +1084,62 @@
     setStatus("Unsaved changes");
   });
 
+  editor.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const highlight = target && target.closest(".suggestion-highlight");
+    if (highlight) {
+      openSuggestionPopup(highlight);
+    }
+  });
+
+  suggestionPopup.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target && target.closest("[data-popup-action]");
+    if (!button) {
+      return;
+    }
+    if (button.dataset.popupAction === "dismiss") {
+      closeSuggestionPopup();
+    } else if (button.dataset.popupAction === "apply") {
+      applySuggestion(button.dataset.suggestionKey);
+    } else if (button.dataset.popupAction === "ignore") {
+      ignoreSuggestion(button.dataset.suggestionKey);
+    }
+  });
+
+  suggestionBulkActions.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target && target.closest("button");
+    if (!button) {
+      return;
+    }
+    if (button.classList.contains("apply-all-button")) {
+      applyAllSuggestions();
+    } else if (button.classList.contains("ignore-all-button")) {
+      ignoreAllSuggestions();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (
+      !suggestionPopup.hidden
+      && !suggestionPopup.contains(target)
+      && !(target && target.closest(".suggestion-highlight"))
+    ) {
+      closeSuggestionPopup();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !suggestionPopup.hidden) {
+      closeSuggestionPopup();
+    }
+  });
+
+  window.addEventListener("resize", positionSuggestionPopup);
+  window.addEventListener("scroll", positionSuggestionPopup, true);
+
   editor.addEventListener("paste", (event) => {
     if (!event.clipboardData) {
       return;
@@ -741,6 +1155,7 @@
       return;
     }
     editor.replaceChildren();
+    resetSuggestions();
     updateCounts();
     setStatus("Document cleared");
     saveDocument();
