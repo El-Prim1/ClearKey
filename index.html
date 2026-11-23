@@ -45,24 +45,71 @@
               </span>
               <h2 id="settings-heading">Settings</h2>
             </div>
-            <span class="soon-badge">SOON</span>
+            <span class="soon-badge local-badge">LOCAL</span>
           </div>
-          <div class="empty-state settings-empty">
-            <span class="empty-illustration settings-illustration" aria-hidden="true">
-              <svg viewBox="0 0 64 64" fill="none">
-                <rect x="11" y="13" width="42" height="38" rx="9" fill="#F2F5FB" stroke="#DCE3EF" stroke-width="1.5"/>
-                <path d="M23 26h18M23 33h11M23 40h15" stroke="#A8B5C9" stroke-width="2.5" stroke-linecap="round"/>
-                <circle cx="45" cy="43" r="8" fill="#E8F7F1" stroke="#BFE9D8" stroke-width="1.5"/>
-                <path d="m42 43 2 2 4-4" stroke="#21A779" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <form class="settings-form" id="settings-form" novalidate>
+            <div class="settings-field">
+              <label for="base-url">Base URL</label>
+              <input
+                id="base-url"
+                name="baseUrl"
+                type="url"
+                value="https://api.openai.com/v1"
+                placeholder="https://api.openai.com/v1"
+                autocomplete="url"
+                spellcheck="false"
+              >
+              <span class="field-hint">OpenAI-compatible API endpoint</span>
+            </div>
+            <div class="settings-field">
+              <label for="model-name">Model name</label>
+              <input
+                id="model-name"
+                name="modelName"
+                type="text"
+                placeholder="gpt-4o-mini"
+                autocomplete="off"
+                spellcheck="false"
+              >
+            </div>
+            <div class="settings-field">
+              <label for="api-key">API Key</label>
+              <div class="api-key-input">
+                <input
+                  id="api-key"
+                  name="apiKey"
+                  type="password"
+                  placeholder="Paste your API key"
+                  autocomplete="off"
+                  spellcheck="false"
+                >
+                <button
+                  class="visibility-toggle"
+                  id="toggle-api-key"
+                  type="button"
+                  aria-label="Show API key"
+                  aria-pressed="false"
+                >
+                  <svg class="eye-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M2.5 10s2.7-5 7.5-5 7.5 5 7.5 5-2.7 5-7.5 5-7.5-5-7.5-5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    <circle cx="10" cy="10" r="2" stroke="currentColor" stroke-width="1.5"/>
+                  </svg>
+                  <svg class="eye-off-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" hidden>
+                    <path d="m3 3 14 14M8.6 5.2A8.8 8.8 0 0 1 10 5c4.8 0 7.5 5 7.5 5a13 13 0 0 1-2.1 2.7M5.2 5.7C3.4 7 2.5 10 2.5 10s2.7 5 7.5 5c.6 0 1.2-.1 1.7-.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <button class="test-key-button" id="test-key" type="submit">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="m5 10.5 3.3 3.3L15.5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-            </span>
-            <h3>Your space, your rules</h3>
-            <p>Personalize your writing setup. Settings are on their way.</p>
-            <span class="progress-label">IN DEVELOPMENT <span>·</span> 01</span>
-          </div>
+              <span>Test Key</span>
+            </button>
+          </form>
           <div class="sidebar-bottom">
-            <span class="sidebar-tip-icon" aria-hidden="true">✦</span>
-            <p>Good writing starts with a clear mind.</p>
+            <span class="sidebar-tip-icon" aria-hidden="true">◇</span>
+            <p>Saved in this browser only. Test Key sends it directly to your configured provider.</p>
           </div>
         </aside>
 
@@ -110,24 +157,37 @@
                 <span>Untitled document</span>
                 <svg class="edit-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m10.8 3.2 2 2M3 13l2.9-.6 7.5-7.5a1.4 1.4 0 0 0-2-2l-7.5 7.5L3 13Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </div>
-              <span class="saved-status"><span></span> All changes saved</span>
+              <span class="saved-status" role="status" aria-live="polite">
+                <span aria-hidden="true"></span>
+                <span id="document-status">All changes saved</span>
+              </span>
             </div>
             <div class="writing-area">
               <div class="writing-heading">
                 <p class="eyebrow">YOUR CANVAS</p>
                 <span class="keyboard-hint">Start typing <kbd>⌘</kbd><kbd>↵</kbd></span>
               </div>
-              <label class="sr-only" for="writing-input">Your text</label>
-              <textarea id="writing-input" placeholder="Start writing something great..." spellcheck="false"></textarea>
+              <div
+                id="writing-input"
+                contenteditable="true"
+                role="textbox"
+                aria-multiline="true"
+                aria-label="Your text"
+                aria-placeholder="Start writing or paste your text here..."
+                data-placeholder="Start writing or paste your text here..."
+                data-empty="true"
+                tabindex="0"
+                spellcheck="true"
+              ></div>
               <div class="editor-watermark" aria-hidden="true">
                 <span class="watermark-mark">C</span>
                 <span>Write freely. We’ll help you polish it.</span>
               </div>
             </div>
             <div class="document-footer">
-              <div class="word-count"><span class="word-count-icon" aria-hidden="true">≡</span><strong>0</strong> words <span class="count-divider"></span> 0 characters</div>
+              <div class="word-count" aria-live="polite" aria-atomic="true"><span class="word-count-icon" aria-hidden="true">≡</span><strong id="word-count">0</strong> words <span class="count-divider"></span> <span id="character-count">0</span> characters</div>
               <div class="document-actions">
-                <button class="text-action" type="button">
+                <button class="text-action copy-action" type="button">
                   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="6" width="9" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M13 6V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v9A1.5 1.5 0 0 0 4.5 15H7" stroke="currentColor" stroke-width="1.5"/></svg>
                   Copy
                 </button>
@@ -173,7 +233,7 @@
               </div>
             </div>
           </div>
-          <div class="suggestions-footer"><span class="footer-shield" aria-hidden="true">◇</span> Your text is never stored</div>
+          <div class="suggestions-footer"><span class="footer-shield" aria-hidden="true">◇</span> Your text stays in this browser</div>
         </aside>
       </main>
 
@@ -181,12 +241,13 @@
         <span class="banner-lock" aria-hidden="true">
           <svg viewBox="0 0 20 20" fill="none"><rect x="4" y="8.5" width="12" height="8.5" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 8.5V6a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="12.5" r="1" fill="currentColor"/></svg>
         </span>
-        <span><strong>Your API key never leaves your browser.</strong> We have no servers.</span>
+        <span><strong>Your API key goes directly to your configured provider.</strong> ClearKey has no servers.</span>
         <span class="banner-separator" aria-hidden="true"></span>
-        <span class="banner-status"><span></span> End-to-end private</span>
+        <span class="banner-status"><span></span> Direct to provider</span>
         <a href="#" class="learn-link">Learn more <span aria-hidden="true">↗</span></a>
       </footer>
     </div>
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
     <script src="app.js"></script>
   </body>
 </html>
