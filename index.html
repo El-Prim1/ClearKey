@@ -29,7 +29,7 @@
         </a>
         <div class="topbar-right">
           <span class="privacy-chip"><span class="privacy-dot"></span> Private by design</span>
-          <button class="avatar-button" type="button" aria-label="Profile">K</button>
+          <button class="avatar-button" id="settings-shortcut" type="button" aria-label="Go to API key settings">K</button>
         </div>
       </header>
 
@@ -197,7 +197,10 @@
             <div class="writing-area">
               <div class="writing-heading">
                 <p class="eyebrow">YOUR CANVAS</p>
-                <span class="keyboard-hint">Start typing <kbd>⌘</kbd><kbd>↵</kbd></span>
+                <div class="writing-heading-actions">
+                  <span class="keyboard-hint">Start typing <kbd>⌘</kbd><kbd>↵</kbd></span>
+                  <button class="try-sample-button" id="try-sample" type="button">Try with sample text</button>
+                </div>
               </div>
               <div
                 id="writing-input"
@@ -282,18 +285,61 @@
         </aside>
       </main>
 
-      <footer class="privacy-banner">
+      <footer class="privacy-banner" id="privacy-banner">
         <span class="banner-lock" aria-hidden="true">
           <svg viewBox="0 0 20 20" fill="none"><rect x="4" y="8.5" width="12" height="8.5" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 8.5V6a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="12.5" r="1" fill="currentColor"/></svg>
         </span>
         <span><strong>Your API key goes directly to your configured provider.</strong> ClearKey has no servers.</span>
         <span class="banner-separator" aria-hidden="true"></span>
         <span class="banner-status"><span></span> Direct to provider</span>
-        <a href="#" class="learn-link">Learn more <span aria-hidden="true">↗</span></a>
+        <a href="#privacy-banner" class="learn-link">Privacy details <span aria-hidden="true">↗</span></a>
       </footer>
     </div>
     <div class="suggestion-popup" id="suggestion-popup" role="dialog" aria-label="Suggestion details" hidden></div>
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+    <dialog class="setup-modal" id="setup-modal" aria-labelledby="setup-title" aria-describedby="setup-description">
+      <div class="setup-modal-header">
+        <div>
+          <p class="setup-eyebrow">GET STARTED</p>
+          <h2 id="setup-title">Bring your own key</h2>
+        </div>
+        <button class="setup-close-button" id="setup-close" type="button" aria-label="Close setup">×</button>
+      </div>
+      <p class="setup-description" id="setup-description">Connect your OpenAI-compatible provider. Your settings stay in this browser.</p>
+      <ol class="setup-progress" aria-label="Setup steps">
+        <li class="is-active" data-step-indicator="1"><span>1</span><small>Base URL</small></li>
+        <li data-step-indicator="2"><span>2</span><small>Model</small></li>
+        <li data-step-indicator="3"><span>3</span><small>API key</small></li>
+      </ol>
+      <p class="setup-test-status" id="setup-test-status" role="status" aria-live="polite"></p>
+      <section class="setup-step-panel" data-setup-step="1">
+        <label for="setup-base-url">1. Paste your Base URL</label>
+        <input id="setup-base-url" type="url" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1" autocomplete="url" spellcheck="false">
+        <p>Use your provider's OpenAI-compatible API base URL.</p>
+      </section>
+      <section class="setup-step-panel" data-setup-step="2" hidden>
+        <label for="setup-model-name">2. Paste your model name</label>
+        <input id="setup-model-name" type="text" placeholder="gpt-4o-mini" autocomplete="off" spellcheck="false">
+        <p>Enter a model available to your API key.</p>
+      </section>
+      <section class="setup-step-panel" data-setup-step="3" hidden>
+        <label for="setup-api-key">3. Paste your API key</label>
+        <input id="setup-api-key" type="password" placeholder="Paste your API key" autocomplete="off" spellcheck="false">
+        <button class="setup-test-button" id="setup-test-key" type="button">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 10.5 3.3 3.3L15.5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Test Key</span>
+        </button>
+        <p>Your key is stored locally and sent only to your configured provider.</p>
+      </section>
+      <div class="setup-modal-footer">
+        <button class="setup-skip-button" id="setup-skip" type="button">Set up later</button>
+        <div class="setup-navigation">
+          <button class="setup-back-button" id="setup-back" type="button" hidden>Back</button>
+          <button class="setup-next-button" id="setup-next" type="button">Continue</button>
+          <button class="setup-next-button" id="setup-finish" type="button" hidden>Finish</button>
+        </div>
+      </div>
+    </dialog>
     <script src="app.js"></script>
   </body>
 </html>

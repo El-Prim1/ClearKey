@@ -1,6 +1,7 @@
 (() => {
   const storageKey = "clearkey.currentDocument";
   const settingsStorageKey = "clearkey.settings";
+  const setupDismissedStorageKey = "clearkey.setupDismissed";
   const editor = document.querySelector("#writing-input");
   const wordCount = document.querySelector("#word-count");
   const characterCount = document.querySelector("#character-count");
@@ -36,8 +37,21 @@
   const apiKeyInput = document.querySelector("#api-key");
   const toggleApiKeyButton = document.querySelector("#toggle-api-key");
   const testKeyButton = document.querySelector("#test-key");
-  const testKeyButtonLabel = testKeyButton.querySelector("span");
   const toast = document.querySelector("#toast");
+  const setupModal = document.querySelector("#setup-modal");
+  const setupCloseButton = document.querySelector("#setup-close");
+  const setupSkipButton = document.querySelector("#setup-skip");
+  const setupBackButton = document.querySelector("#setup-back");
+  const setupNextButton = document.querySelector("#setup-next");
+  const setupFinishButton = document.querySelector("#setup-finish");
+  const setupTestButton = document.querySelector("#setup-test-key");
+  const setupTestStatus = document.querySelector("#setup-test-status");
+  const setupBaseUrlInput = document.querySelector("#setup-base-url");
+  const setupModelNameInput = document.querySelector("#setup-model-name");
+  const setupApiKeyInput = document.querySelector("#setup-api-key");
+  const settingsShortcut = document.querySelector("#settings-shortcut");
+  const trySampleButton = document.querySelector("#try-sample");
+  const learnLink = document.querySelector(".learn-link");
   let storageErrorLogged = false;
   let settingsSaveErrorLogged = false;
   let toastTimer = 0;
@@ -48,6 +62,7 @@
   let pendingAutoCheck = false;
   let lastUsage = null;
   let sessionTokens = 0;
+  let currentSetupStep = 1;
 
   function showToast(message, type) {
     window.clearTimeout(toastTimer);
@@ -57,6 +72,56 @@
     toastTimer = window.setTimeout(() => {
       toast.hidden = true;
     }, type === "error" ? 10000 : 6000);
+  }
+
+  function showSetupStep(step) {
+    currentSetupStep = step;
+    document.querySelectorAll("[data-setup-step]").forEach((panel) => {
+      panel.hidden = Number(panel.dataset.setupStep) !== step;
+    });
+    document.querySelectorAll("[data-step-indicator]").forEach((indicator) => {
+      const indicatorStep = Number(indicator.dataset.stepIndicator);
+      indicator.classList.toggle("is-active", indicatorStep === step);
+      indicator.classList.toggle("is-complete", indicatorStep < step);
+    });
+    setupBackButton.hidden = step === 1;
+    setupNextButton.hidden = step === 3;
+    setupFinishButton.hidden = step !== 3;
+  }
+
+  function syncSetupFields() {
+    setupBaseUrlInput.value = baseUrlInput.value;
+    setupModelNameInput.value = modelNameInput.value;
+    setupApiKeyInput.value = apiKeyInput.value;
+  }
+
+  function persistSetupDismissal() {
+    try {
+      localStorage.setItem(setupDismissedStorageKey, "true");
+    } catch (error) {
+      console.error("ClearKey could not save the setup dismissal in local storage.", error);
+      showToast("Setup preference could not be saved in this browser.", "error");
+    }
+  }
+
+  function maybeOpenSetupModal() {
+    if (apiKeyInput.value.trim()) {
+      return;
+    }
+
+    let setupDismissed = false;
+    try {
+      setupDismissed = localStorage.getItem(setupDismissedStorageKey) === "true";
+    } catch (error) {
+      console.error("ClearKey could not read the setup preference from local storage.", error);
+      showToast("Setup preference could not be read in this browser.", "error");
+    }
+
+    if (!setupDismissed) {
+      showSetupStep(1);
+      setupModal.showModal();
+      setupBaseUrlInput.focus();
+    }
   }
 
   function saveSettings() {
@@ -162,11 +227,43 @@
     return responseText.replace(/\s+/g, " ").trim().slice(0, 240);
   }
 
-  async function testApiKey() {
+  function setSetupTestStatus(message, state) {
+    setupTestStatus.textContent = message;
+    if (state) {
+      setupTestStatus.dataset.state = state;
+    } else {
+      delete setupTestStatus.dataset.state;
+    }
+  }
+
+  function focusSettingInput(input) {
+    if (!setupModal.open) {
+      input.focus();
+      return;
+    }
+
+    if (input === baseUrlInput) {
+      showSetupStep(1);
+      setupBaseUrlInput.focus();
+    } else if (input === modelNameInput) {
+      showSetupStep(2);
+      setupModelNameInput.focus();
+    } else {
+      showSetupStep(3);
+      setupApiKeyInput.focus();
+    }
+  }
+
+  async function testApiKey(triggerButton = testKeyButton) {
+    const isSetupTest = triggerButton === setupTestButton;
+    const buttonLabel = triggerButton.querySelector("span");
     const apiKey = apiKeyInput.value.trim();
     if (!apiKey) {
+      if (isSetupTest) {
+        setSetupTestStatus("Paste your API key first.", "error");
+      }
       showToast("Enter an API key before testing the connection.", "error");
-      apiKeyInput.focus();
+      focusSettingInput(apiKeyInput);
       return;
     }
 
@@ -174,14 +271,20 @@
     try {
       endpoint = getModelsEndpoint();
     } catch (error) {
+      if (isSetupTest) {
+        setSetupTestStatus(error.message, "error");
+      }
       showToast(error.message, "error");
-      baseUrlInput.focus();
+      focusSettingInput(baseUrlInput);
       return;
     }
 
-    testKeyButton.disabled = true;
-    testKeyButton.classList.add("is-loading");
-    testKeyButtonLabel.textContent = "Testing…";
+    if (isSetupTest) {
+      setSetupTestStatus("Testing connection…", "checking");
+    }
+    triggerButton.disabled = true;
+    triggerButton.classList.add("is-loading");
+    buttonLabel.textContent = "Testing…";
 
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 15000);
@@ -197,52 +300,76 @@
       });
 
       if (response.ok) {
+        if (isSetupTest) {
+          setSetupTestStatus("Connected", "success");
+        }
         showToast("Connected", "success");
+        if (isSetupTest && setupModal.open) {
+          setupModal.close();
+        }
         return;
       }
 
       const providerMessage = getProviderErrorMessage(await response.text());
       if (response.status === 401) {
+        const message = providerMessage
+          ? `Invalid API key (401): ${providerMessage}`
+          : "Invalid API key (401).";
+        if (isSetupTest) {
+          setSetupTestStatus(message, "error");
+        }
         showToast(
-          providerMessage
-            ? `Invalid API key (401): ${providerMessage}`
-            : "Invalid API key (401).",
+          message,
           "error"
         );
         return;
       }
       if (response.status === 404) {
+        const message = providerMessage
+          ? `Base URL or /models endpoint not found (404): ${providerMessage}`
+          : "Base URL or /models endpoint not found (404).";
+        if (isSetupTest) {
+          setSetupTestStatus(message, "error");
+        }
         showToast(
-          providerMessage
-            ? `Base URL or /models endpoint not found (404): ${providerMessage}`
-            : "Base URL or /models endpoint not found (404).",
+          message,
           "error"
         );
         return;
       }
 
-      showToast(
-        providerMessage
-          ? `Provider error (${response.status}): ${providerMessage}`
-          : `Provider returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}.`,
-        "error"
-      );
+      const errorMessage = providerMessage
+        ? `Provider error (${response.status}): ${providerMessage}`
+        : `Provider returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}.`;
+      if (isSetupTest) {
+        setSetupTestStatus(errorMessage, "error");
+      }
+      showToast(errorMessage, "error");
     } catch (error) {
       if (error.name === "AbortError") {
-        showToast("Connection timed out. Check the Base URL and try again.", "error");
+        const message = "Connection timed out. Check the Base URL and try again.";
+        if (isSetupTest) {
+          setSetupTestStatus(message, "error");
+        }
+        showToast(message, "error");
       } else if (error instanceof TypeError) {
-        showToast(
-          `Network/CORS error: ${error.message || "Could not reach the provider."} Check the URL, connection, and provider CORS settings.`,
-          "error"
-        );
+        const message = `Network/CORS error: ${error.message || "Could not reach the provider."} Check the URL, connection, and provider CORS settings.`;
+        if (isSetupTest) {
+          setSetupTestStatus(message, "error");
+        }
+        showToast(message, "error");
       } else {
-        showToast(`Could not test the API key: ${error.message || "Unexpected error."}`, "error");
+        const message = `Could not test the API key: ${error.message || "Unexpected error."}`;
+        if (isSetupTest) {
+          setSetupTestStatus(message, "error");
+        }
+        showToast(message, "error");
       }
     } finally {
       window.clearTimeout(timeout);
-      testKeyButton.disabled = false;
-      testKeyButton.classList.remove("is-loading");
-      testKeyButtonLabel.textContent = "Test Key";
+      triggerButton.disabled = false;
+      triggerButton.classList.remove("is-loading");
+      buttonLabel.textContent = "Test Key";
     }
   }
 
@@ -1109,11 +1236,30 @@
     testApiKey();
   });
 
-  [baseUrlInput, modelNameInput, apiKeyInput].forEach((input) => {
-    input.addEventListener("input", () => {
+  [
+    [baseUrlInput, setupBaseUrlInput],
+    [modelNameInput, setupModelNameInput],
+    [apiKeyInput, setupApiKeyInput]
+  ].forEach(([settingsInput, setupInput]) => {
+    settingsInput.addEventListener("input", () => {
+      setupInput.value = settingsInput.value;
       saveSettings();
       scheduleAutoCheck();
     });
+
+    setupInput.addEventListener("input", () => {
+      settingsInput.value = setupInput.value;
+      saveSettings();
+      scheduleAutoCheck();
+      setSetupTestStatus("", "");
+    });
+  });
+
+  editor.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      checkText();
+    }
   });
 
   toggleApiKeyButton.addEventListener("click", () => {
@@ -1144,8 +1290,87 @@
 
   tokenPriceInput.addEventListener("input", updateCostSummary);
 
+  setupCloseButton.addEventListener("click", () => setupModal.close());
+  setupSkipButton.addEventListener("click", () => setupModal.close());
+  setupModal.addEventListener("close", persistSetupDismissal);
+  setupModal.addEventListener("click", (event) => {
+    if (event.target === setupModal) {
+      setupModal.close();
+    }
+  });
+
+  setupNextButton.addEventListener("click", () => {
+    if (currentSetupStep === 1) {
+      if (!setupBaseUrlInput.value.trim()) {
+        setSetupTestStatus("Paste a Base URL to continue.", "error");
+        showToast("Paste a Base URL to continue.", "error");
+        setupBaseUrlInput.focus();
+        return;
+      }
+      setSetupTestStatus("", "");
+      showSetupStep(2);
+      setupModelNameInput.focus();
+      return;
+    }
+
+    if (!setupModelNameInput.value.trim()) {
+      setSetupTestStatus("Paste a model name to continue.", "error");
+      showToast("Paste a model name to continue.", "error");
+      setupModelNameInput.focus();
+      return;
+    }
+    setSetupTestStatus("", "");
+    showSetupStep(3);
+    setupApiKeyInput.focus();
+  });
+
+  setupBackButton.addEventListener("click", () => {
+    showSetupStep(currentSetupStep - 1);
+    (currentSetupStep === 1 ? setupBaseUrlInput : setupModelNameInput).focus();
+  });
+
+  setupFinishButton.addEventListener("click", () => setupModal.close());
+  setupTestButton.addEventListener("click", () => {
+    saveSettings();
+    testApiKey(setupTestButton);
+  });
+
+  settingsShortcut.addEventListener("click", () => {
+    apiKeyInput.scrollIntoView({ behavior: "smooth", block: "center" });
+    apiKeyInput.focus({ preventScroll: true });
+  });
+
+  trySampleButton.addEventListener("click", () => {
+    if (getEditorText().trim() && !window.confirm("Replace your current text with the sample paragraph?")) {
+      return;
+    }
+
+    const sampleText = "Yesterday, the team have finish the report and we was happy with it's results. Their going to share it tomorrow however nobody know what the numbers means.";
+    editor.textContent = sampleText;
+    resetSuggestions();
+    updateCounts();
+    saveDocument();
+    editor.focus();
+    setCaretAtTextOffset(sampleText.length);
+    scheduleAutoCheck();
+    showToast(
+      apiKeyInput.value.trim()
+        ? "Sample text loaded. Check it whenever you’re ready."
+        : "Sample text loaded. Add your API key to enable checking.",
+      "success"
+    );
+  });
+
+  learnLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    document.querySelector("#privacy-banner").scrollIntoView({ behavior: "smooth", block: "center" });
+    showToast("Your text stays in this browser. Your key goes only to your configured provider.", "success");
+  });
+
   loadSettings();
+  syncSetupFields();
   updateCostSummary();
+  maybeOpenSetupModal();
 
   function getEditorText() {
     const text = editor.innerText.replace(/\r\n?/g, "\n");
@@ -1258,6 +1483,7 @@
     const text = getEditorText();
     if (!text.trim()) {
       setStatus("There is no text to copy");
+      showToast("Write something before copying.", "error");
       return;
     }
 
@@ -1267,10 +1493,12 @@
       }
       await navigator.clipboard.writeText(text);
       setStatus("Copied to clipboard");
+      showToast("Copied to clipboard.", "success");
     } catch (clipboardError) {
       try {
         if (copyWithFallback(text)) {
           setStatus("Copied to clipboard");
+          showToast("Copied to clipboard.", "success");
           return;
         }
       } catch (fallbackError) {
@@ -1278,6 +1506,7 @@
       }
       setStatus("Copy failed — allow clipboard access");
       console.error("ClearKey could not copy the document to the clipboard.", clipboardError);
+      showToast("Copy failed. Allow clipboard access and try again.", "error");
     }
   }
 
@@ -1358,7 +1587,7 @@
   copyButton.addEventListener("click", copyDocument);
 
   clearButton.addEventListener("click", () => {
-    if (editor.innerHTML && !window.confirm("Clear all text in this document?")) {
+    if (getEditorText().trim() && !window.confirm("Clear all text in this document?")) {
       return;
     }
     editor.replaceChildren();
@@ -1368,6 +1597,7 @@
     setStatus("Document cleared");
     saveDocument();
     editor.focus();
+    showToast("Document cleared.", "success");
   });
 
   try {
