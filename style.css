@@ -660,6 +660,108 @@ button {
   content: "";
 }
 
+.check-info-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 12px;
+  padding: 10px 13px;
+  border: 1px solid #e8edf4;
+  border-radius: 9px;
+  background: #fff;
+  color: #8290a4;
+  font-size: 9px;
+  box-shadow: 0 2px 8px rgba(27, 49, 79, .02);
+}
+
+.check-status-group,
+.check-usage,
+.token-price-control {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.check-status-group {
+  gap: 7px;
+}
+
+.check-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #a4afbf;
+}
+
+.check-status-group strong,
+.check-usage strong {
+  color: #59687d;
+  font-weight: 700;
+}
+
+.check-usage {
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.check-info-bar[data-state="checking"] .check-status-dot {
+  background: #e2a53c;
+  box-shadow: 0 0 0 3px #fbf3e5;
+}
+
+.check-info-bar[data-state="success"] .check-status-dot {
+  background: #32bb88;
+}
+
+.check-info-bar[data-state="error"] .check-status-dot {
+  background: #dc6262;
+}
+
+#check-status-hint {
+  color: #a77928;
+  font-size: 8px;
+}
+
+.token-price-control {
+  justify-self: start;
+  gap: 7px;
+  color: #8290a4;
+  white-space: nowrap;
+}
+
+.token-price-control input {
+  width: 68px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid #e5eaf1;
+  border-radius: 5px;
+  background: #fbfcfe;
+  color: #59687d;
+  font: inherit;
+}
+
+.token-price-control input:focus {
+  border-color: #9bd8c1;
+  outline: 2px solid #e3f5ed;
+}
+
+.cost-summary {
+  justify-self: end;
+  margin: 0;
+  color: #738197;
+  font-size: 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.price-hint {
+  grid-column: 1 / -1;
+  color: #a44646;
+  font-size: 8px;
+}
+
 .document-card {
   display: flex;
   min-height: 500px;
@@ -1673,6 +1775,34 @@ kbd {
     padding: 0 9px;
   }
 
+  .check-info-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 10px;
+    padding: 9px 10px;
+  }
+
+  .check-status-group {
+    flex-wrap: wrap;
+  }
+
+  .check-usage {
+    gap: 3px;
+    font-size: 8px;
+  }
+
+  .token-price-control {
+    gap: 5px;
+    font-size: 8px;
+  }
+
+  .token-price-control input {
+    width: 58px;
+  }
+
+  .cost-summary {
+    font-size: 7px;
+  }
+
   .document-card {
     min-height: 440px;
   }
@@ -1750,6 +1880,15 @@ kbd {
 
   .toolbar-actions {
     gap: 6px;
+  }
+
+  .check-info-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .cost-summary {
+    justify-self: start;
+    text-align: left;
   }
 
   .document-footer {

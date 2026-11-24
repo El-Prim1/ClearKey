@@ -9,6 +9,16 @@
   const clearButton = document.querySelector(".clear-action");
   const checkButton = document.querySelector("#check-button");
   const checkButtonLabel = checkButton.querySelector("span");
+  const autoCheckInput = document.querySelector("#auto-check");
+  const checkInfoBar = document.querySelector("#check-info-bar");
+  const checkStatus = document.querySelector("#check-status");
+  const checkStatusHint = document.querySelector("#check-status-hint");
+  const inputTokenCount = document.querySelector("#input-token-count");
+  const outputTokenCount = document.querySelector("#output-token-count");
+  const totalTokenCount = document.querySelector("#total-token-count");
+  const tokenPriceInput = document.querySelector("#token-price");
+  const costSummary = document.querySelector("#cost-summary");
+  const priceHint = document.querySelector("#price-hint");
   const languageSelect = document.querySelector("#language-select");
   const toneSelect = document.querySelector("#tone-select");
   const suggestionsContent = document.querySelector(".suggestions-content");
@@ -33,6 +43,11 @@
   let toastTimer = 0;
   let activeSuggestions = [];
   let popupAnchor = null;
+  let autoCheckTimer = 0;
+  let checkInProgress = false;
+  let pendingAutoCheck = false;
+  let lastUsage = null;
+  let sessionTokens = 0;
 
   function showToast(message, type) {
     window.clearTimeout(toastTimer);
@@ -763,9 +778,136 @@
     showToast("All suggestions ignored.", "success");
   }
 
-  async function checkText() {
+  function setCheckStatus(message, state) {
+    checkStatus.textContent = message;
+    checkInfoBar.dataset.state = state;
+  }
+
+  function setCheckStatusHint(message) {
+    checkStatusHint.textContent = message;
+    checkStatusHint.hidden = !message;
+  }
+
+  function getTokenPrice() {
+    const rawPrice = tokenPriceInput.value.trim();
+    if (!rawPrice) {
+      return null;
+    }
+
+    const price = Number(rawPrice);
+    return Number.isFinite(price) && price >= 0 ? price : null;
+  }
+
+  function formatTokenCount(count) {
+    return count.toLocaleString();
+  }
+
+  function updateCostSummary() {
+    const price = getTokenPrice();
+    priceHint.hidden = price !== null;
+    tokenPriceInput.setAttribute("aria-invalid", String(price === null));
+
+    if (!lastUsage) {
+      costSummary.textContent = `Last check: — | Session: ${price === null ? "—" : `$${((sessionTokens / 1000000) * price).toFixed(4)}`}`;
+      return;
+    }
+
+    const lastCost = price === null
+      ? "—"
+      : `$${((lastUsage.totalTokens / 1000000) * price).toFixed(4)}`;
+    const sessionTotal = price === null
+      ? "—"
+      : `$${((sessionTokens / 1000000) * price).toFixed(4)}`;
+    costSummary.textContent = `Last check: ${formatTokenCount(lastUsage.totalTokens)} tokens ~ ${lastCost} | Session: ${sessionTotal}`;
+  }
+
+  function getUsageCount(usage, names) {
+    if (!usage || typeof usage !== "object") {
+      return null;
+    }
+
+    for (const name of names) {
+      const value = usage[name];
+      if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+        return Math.round(value);
+      }
+    }
+    return null;
+  }
+
+  function recordTokenUsage(usage, inputText, outputText) {
+    const reportedInput = getUsageCount(usage, ["prompt_tokens", "input_tokens"]);
+    const reportedOutput = getUsageCount(usage, ["completion_tokens", "output_tokens"]);
+    const totalReported = getUsageCount(usage, ["total_tokens"]);
+    const hasReportedBreakdown = reportedInput !== null && reportedOutput !== null;
+    const inputTokens = hasReportedBreakdown
+      ? reportedInput
+      : Math.ceil(inputText.length / 4);
+    const outputTokens = hasReportedBreakdown
+      ? reportedOutput
+      : Math.ceil(outputText.length / 4);
+    const totalTokens = hasReportedBreakdown && totalReported !== null
+      ? totalReported
+      : inputTokens + outputTokens;
+
+    lastUsage = { inputTokens, outputTokens, totalTokens };
+    sessionTokens += totalTokens;
+    inputTokenCount.textContent = formatTokenCount(inputTokens);
+    outputTokenCount.textContent = formatTokenCount(outputTokens);
+    totalTokenCount.textContent = formatTokenCount(totalTokens);
+    updateCostSummary();
+  }
+
+  function scheduleAutoCheck() {
+    window.clearTimeout(autoCheckTimer);
+    autoCheckTimer = 0;
+    pendingAutoCheck = false;
+
+    if (!autoCheckInput.checked) {
+      setCheckStatusHint("");
+      return;
+    }
+
+    if (!apiKeyInput.value.trim()) {
+      setCheckStatus("Idle", "idle");
+      setCheckStatusHint("Add your API key to enable checking");
+      return;
+    }
+
+    if (getEditorText().trim().length < 10) {
+      setCheckStatus("Idle", "idle");
+      setCheckStatusHint("Enter at least 10 characters to auto-check.");
+      return;
+    }
+
+    setCheckStatusHint("");
+    if (!checkInProgress) {
+      setCheckStatus("Idle", "idle");
+    }
+    autoCheckTimer = window.setTimeout(() => {
+      autoCheckTimer = 0;
+      checkText({ automatic: true });
+    }, 1500);
+  }
+
+  async function checkText(options = {}) {
+    const automatic = options.automatic === true;
+    if (checkInProgress) {
+      if (automatic) {
+        pendingAutoCheck = true;
+      }
+      return;
+    }
+
+    window.clearTimeout(autoCheckTimer);
+    autoCheckTimer = 0;
     const text = getEditorText();
     if (!text.trim()) {
+      setCheckStatus("Error", "error");
+      setCheckStatusHint("");
+      if (automatic) {
+        return;
+      }
       showToast("Write or paste some text before checking.", "error");
       editor.focus();
       return;
@@ -773,13 +915,28 @@
 
     const apiKey = apiKeyInput.value.trim();
     if (!apiKey) {
+      if (automatic) {
+        setCheckStatus("Idle", "idle");
+        setCheckStatusHint("Add your API key to enable checking");
+        return;
+      }
+      setCheckStatus("Error", "error");
+      setCheckStatusHint("");
       showToast("Enter an API key before checking.", "error");
       apiKeyInput.focus();
       return;
     }
 
+    if (automatic && text.trim().length < 10) {
+      setCheckStatus("Idle", "idle");
+      setCheckStatusHint("Enter at least 10 characters to auto-check.");
+      return;
+    }
+
     const model = modelNameInput.value.trim();
     if (!model) {
+      setCheckStatus("Error", "error");
+      setCheckStatusHint("");
       showToast("Enter a model name before checking.", "error");
       modelNameInput.focus();
       return;
@@ -789,11 +946,16 @@
     try {
       endpoint = getApiEndpoint("chat/completions");
     } catch (error) {
+      setCheckStatus("Error", "error");
+      setCheckStatusHint("");
       showToast(error.message, "error");
       baseUrlInput.focus();
       return;
     }
 
+    checkInProgress = true;
+    setCheckStatus("Checking...", "checking");
+    setCheckStatusHint("");
     checkButton.disabled = true;
     checkButton.classList.add("is-loading");
     checkButtonLabel.textContent = "Checking…";
@@ -825,6 +987,7 @@
 
       const responseText = await response.text();
       if (!response.ok) {
+        setCheckStatus("Error", "error");
         const providerMessage = getProviderErrorMessage(responseText);
         if (response.status === 401) {
           showToast(
@@ -867,13 +1030,23 @@
           .map((part) => part.text)
           .join("");
       }
+      recordTokenUsage(
+        providerResponse && providerResponse.usage,
+        text,
+        typeof content === "string" ? content : ""
+      );
       if (typeof content !== "string") {
         throw new Error("The provider response did not include assistant text.");
       }
 
       const result = parseSuggestions(content, text);
       if (getEditorText() !== text) {
-        showToast("Text changed while checking. Run Check again to review the latest version.", "error");
+        if (automatic) {
+          setCheckStatus("Idle", "idle");
+        } else {
+          setCheckStatus("Error", "error");
+          showToast("Text changed while checking. Run Check again to review the latest version.", "error");
+        }
         return;
       }
       closeSuggestionPopup();
@@ -881,6 +1054,7 @@
       renderEditorHighlights(text, activeSuggestions);
       updateCounts();
       renderSuggestions(activeSuggestions);
+      setCheckStatus(`${result.suggestions.length} issues found`, "success");
       console.log("ClearKey suggestions:", {
         detected_language: result.detectedLanguage,
         suggestions: activeSuggestions
@@ -902,6 +1076,7 @@
         );
       }
     } catch (error) {
+      setCheckStatus("Error", "error");
       if (error.name === "AbortError") {
         showToast("Check timed out. Try again or verify the provider endpoint.", "error");
       } else if (error instanceof TypeError) {
@@ -918,6 +1093,13 @@
       checkButton.disabled = false;
       checkButton.classList.remove("is-loading");
       checkButtonLabel.textContent = "Check";
+      checkInProgress = false;
+      if (pendingAutoCheck) {
+        pendingAutoCheck = false;
+        if (autoCheckInput.checked) {
+          checkText({ automatic: true });
+        }
+      }
     }
   }
 
@@ -928,7 +1110,10 @@
   });
 
   [baseUrlInput, modelNameInput, apiKeyInput].forEach((input) => {
-    input.addEventListener("input", saveSettings);
+    input.addEventListener("input", () => {
+      saveSettings();
+      scheduleAutoCheck();
+    });
   });
 
   toggleApiKeyButton.addEventListener("click", () => {
@@ -940,9 +1125,27 @@
     toggleApiKeyButton.querySelector(".eye-off-icon").hidden = !shouldShowKey;
   });
 
-  checkButton.addEventListener("click", checkText);
+  checkButton.addEventListener("click", () => checkText());
+
+  autoCheckInput.addEventListener("change", () => {
+    if (autoCheckInput.checked) {
+      scheduleAutoCheck();
+      return;
+    }
+
+    window.clearTimeout(autoCheckTimer);
+    autoCheckTimer = 0;
+    pendingAutoCheck = false;
+    setCheckStatusHint("");
+    if (!checkInProgress) {
+      setCheckStatus("Idle", "idle");
+    }
+  });
+
+  tokenPriceInput.addEventListener("input", updateCostSummary);
 
   loadSettings();
+  updateCostSummary();
 
   function getEditorText() {
     const text = editor.innerText.replace(/\r\n?/g, "\n");
@@ -1082,6 +1285,10 @@
     updateCounts();
     resetSuggestions();
     setStatus("Unsaved changes");
+    if (!checkInProgress) {
+      setCheckStatus("Idle", "idle");
+    }
+    scheduleAutoCheck();
   });
 
   editor.addEventListener("click", (event) => {
@@ -1157,6 +1364,7 @@
     editor.replaceChildren();
     resetSuggestions();
     updateCounts();
+    scheduleAutoCheck();
     setStatus("Document cleared");
     saveDocument();
     editor.focus();
