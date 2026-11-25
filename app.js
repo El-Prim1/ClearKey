@@ -68,6 +68,7 @@
   let toastTimer = 0;
   let activeSuggestions = [];
   let popupAnchor = null;
+  let popupCloseTimer = 0;
   let autoCheckTimer = 0;
   let checkInProgress = false;
   let pendingAutoCheck = false;
@@ -943,8 +944,24 @@
   }
 
   function closeSuggestionPopup() {
+    window.clearTimeout(popupCloseTimer);
+    popupCloseTimer = 0;
     suggestionPopup.hidden = true;
     popupAnchor = null;
+  }
+
+  function schedulePopupClose() {
+    window.clearTimeout(popupCloseTimer);
+    popupCloseTimer = window.setTimeout(() => {
+      popupCloseTimer = 0;
+      if (
+        (popupAnchor && popupAnchor.matches(":hover"))
+        || suggestionPopup.matches(":hover")
+      ) {
+        return;
+      }
+      closeSuggestionPopup();
+    }, 300);
   }
 
   function positionSuggestionPopup() {
@@ -989,6 +1006,9 @@
     }
     const suggestions = activeSuggestions.filter((suggestion) => keys.includes(suggestion.key));
     if (suggestions.length === 0) {
+      return;
+    }
+    if (popupAnchor === highlight && !suggestionPopup.hidden) {
       return;
     }
 
@@ -1889,6 +1909,34 @@
     }
   });
 
+  editor.addEventListener("pointerover", (event) => {
+    if (event.pointerType === "touch") {
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    const highlight = target && target.closest(".suggestion-highlight");
+    if (highlight) {
+      window.clearTimeout(popupCloseTimer);
+      popupCloseTimer = 0;
+      openSuggestionPopup(highlight);
+    }
+  });
+
+  editor.addEventListener("pointerout", (event) => {
+    if (event.pointerType === "touch") {
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    const highlight = target && target.closest(".suggestion-highlight");
+    if (
+      !highlight
+      || (event.relatedTarget instanceof Node && highlight.contains(event.relatedTarget))
+    ) {
+      return;
+    }
+    schedulePopupClose();
+  });
+
   suggestionPopup.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     const button = target && target.closest("[data-popup-action]");
@@ -1902,6 +1950,22 @@
     } else if (button.dataset.popupAction === "ignore") {
       ignoreSuggestion(button.dataset.suggestionKey);
     }
+  });
+
+  suggestionPopup.addEventListener("pointerenter", () => {
+    window.clearTimeout(popupCloseTimer);
+    popupCloseTimer = 0;
+  });
+
+  suggestionPopup.addEventListener("pointerleave", (event) => {
+    if (
+      popupAnchor
+      && event.relatedTarget instanceof Node
+      && popupAnchor.contains(event.relatedTarget)
+    ) {
+      return;
+    }
+    schedulePopupClose();
   });
 
   suggestionBulkActions.addEventListener("click", (event) => {
