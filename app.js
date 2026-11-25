@@ -2,6 +2,8 @@
   const storageKey = "clearkey.currentDocument";
   const settingsStorageKey = "clearkey.settings";
   const setupDismissedStorageKey = "clearkey.setupDismissed";
+  const documentsStorageKey = "clearkey.documents";
+  const activeDocumentStorageKey = "clearkey.activeDocument";
   const editor = document.querySelector("#writing-input");
   const wordCount = document.querySelector("#word-count");
   const characterCount = document.querySelector("#character-count");
@@ -27,7 +29,7 @@
   const suggestionsEmptyTitle = document.querySelector("#suggestions-empty-title");
   const suggestionsEmptyDescription = document.querySelector("#suggestions-empty-description");
   const suggestionsList = document.querySelector("#suggestions-list");
-  const suggestionCount = document.querySelector("#suggestion-count");
+  const suggestionCount = document.querySelector("#suggestions-title-count");
   const issueCount = document.querySelector("#issue-count");
   const suggestionBulkActions = document.querySelector("#suggestion-bulk-actions");
   const suggestionPopup = document.querySelector("#suggestion-popup");
@@ -38,6 +40,17 @@
   const toggleApiKeyButton = document.querySelector("#toggle-api-key");
   const testKeyButton = document.querySelector("#test-key");
   const toast = document.querySelector("#toast");
+  const documentTitleInput = document.querySelector("#document-title");
+  const editorView = document.querySelector("#editor-view");
+  const documentsView = document.querySelector("#documents-view");
+  const settingsView = document.querySelector("#settings-view");
+  const documentsGrid = document.querySelector("#documents-grid");
+  const documentsEmpty = document.querySelector("#documents-empty");
+  const documentsNav = document.querySelector("#documents-nav");
+  const settingsNav = document.querySelector("#settings-nav");
+  const brandHome = document.querySelector("#brand-home");
+  const newDocumentButton = document.querySelector("#new-document");
+  const emptyNewDocumentButton = document.querySelector("#empty-new-document");
   const setupModal = document.querySelector("#setup-modal");
   const setupCloseButton = document.querySelector("#setup-close");
   const setupSkipButton = document.querySelector("#setup-skip");
@@ -49,9 +62,7 @@
   const setupBaseUrlInput = document.querySelector("#setup-base-url");
   const setupModelNameInput = document.querySelector("#setup-model-name");
   const setupApiKeyInput = document.querySelector("#setup-api-key");
-  const settingsShortcut = document.querySelector("#settings-shortcut");
   const trySampleButton = document.querySelector("#try-sample");
-  const learnLink = document.querySelector(".learn-link");
   let storageErrorLogged = false;
   let settingsSaveErrorLogged = false;
   let toastTimer = 0;
@@ -63,6 +74,10 @@
   let lastUsage = null;
   let sessionTokens = 0;
   let currentSetupStep = 1;
+  let documents = [];
+  let activeDocumentId = null;
+  let currentView = "editor";
+  let fetchedModels = [];
 
   function showToast(message, type) {
     window.clearTimeout(toastTimer);
@@ -167,6 +182,206 @@
     } catch (error) {
       console.error("ClearKey could not load settings from local storage.", error);
       showToast("Saved settings could not be loaded. Check this browser's local storage.", "error");
+    }
+  }
+
+  function getWordTotal(text) {
+    const trimmed = text.trim();
+    return trimmed ? trimmed.split(/\s+/u).length : 0;
+  }
+
+  function saveDocumentIndex() {
+    try {
+      localStorage.setItem(documentsStorageKey, JSON.stringify(documents));
+      if (activeDocumentId) {
+        localStorage.setItem(activeDocumentStorageKey, activeDocumentId);
+      } else {
+        localStorage.removeItem(activeDocumentStorageKey);
+      }
+      return true;
+    } catch (error) {
+      console.error("ClearKey could not save the documents list.", error);
+      showToast("Documents could not be saved in this browser.", "error");
+      return false;
+    }
+  }
+
+  function updateActiveDocumentRecord(text = getEditorText()) {
+    if (!activeDocumentId) {
+      if (!text.trim()) {
+        return;
+      }
+      activeDocumentId = `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    const title = documentTitleInput.value.trim() || "Untitled document";
+    const now = new Date().toISOString();
+    const existing = documents.find((item) => item.id === activeDocumentId);
+    if (existing) {
+      const changed = existing.title !== title || existing.content !== text;
+      existing.title = title;
+      existing.content = text;
+      if (changed) {
+        existing.updatedAt = now;
+      }
+      existing.wordCount = getWordTotal(text);
+    } else {
+      documents.unshift({
+        id: activeDocumentId,
+        title,
+        content: text,
+        updatedAt: now,
+        wordCount: getWordTotal(text)
+      });
+    }
+    saveDocumentIndex();
+  }
+
+  function renderDocuments() {
+    documentsGrid.replaceChildren();
+    documentsEmpty.hidden = documents.length > 0;
+
+    documents
+      .slice()
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+      .forEach((item) => {
+        const card = document.createElement("article");
+        card.className = "document-tile";
+        card.dataset.documentId = item.id;
+        card.tabIndex = 0;
+        card.setAttribute("role", "button");
+        card.setAttribute("aria-label", `Open ${item.title || "Untitled document"}`);
+
+        const preview = document.createElement("div");
+        preview.className = "document-tile-preview";
+        const lines = (item.content || "").split(/\s+/u).filter(Boolean);
+        const excerpts = [];
+        for (let index = 0; index < 4; index += 1) {
+          excerpts.push(lines.slice(index * 9, (index + 1) * 9).join(" "));
+        }
+        excerpts.forEach((text, index) => {
+          const line = document.createElement("span");
+          line.className = `preview-line preview-line-${index + 1}`;
+          line.textContent = text || (lines.length ? "" : " ");
+          preview.append(line);
+        });
+
+        const details = document.createElement("div");
+        details.className = "document-tile-details";
+        const title = document.createElement("strong");
+        title.className = "document-tile-title";
+        title.textContent = item.title || "Untitled document";
+        const metadata = document.createElement("span");
+        metadata.className = "document-tile-meta";
+        metadata.textContent = `Last edited · ${getWordTotal(item.content || "")} words`;
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "delete-document-button";
+        deleteButton.dataset.deleteDocument = item.id;
+        deleteButton.setAttribute("aria-label", `Delete ${item.title || "Untitled document"}`);
+        deleteButton.innerHTML = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2m3 0-.7 10H5.7L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 9v4m3-4v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+        details.append(title, metadata, deleteButton);
+        card.append(preview, details);
+        documentsGrid.append(card);
+      });
+  }
+
+  function setView(view) {
+    currentView = view;
+    editorView.hidden = view !== "editor";
+    documentsView.hidden = view !== "documents";
+    settingsView.hidden = view !== "settings";
+    documentsNav.setAttribute("aria-current", String(view === "documents"));
+    settingsNav.setAttribute("aria-current", String(view === "settings"));
+    brandHome.setAttribute("aria-current", String(view === "editor"));
+    if (view === "documents") {
+      renderDocuments();
+    }
+  }
+
+  function openDocument(documentId) {
+    const record = documents.find((item) => item.id === documentId);
+    if (!record) {
+      showToast("That document could not be found.", "error");
+      renderDocuments();
+      return;
+    }
+
+    activeDocumentId = record.id;
+    documentTitleInput.value = record.title || "Untitled document";
+    editor.textContent = record.content || "";
+    resetSuggestions();
+    updateCounts();
+    saveDocument();
+    setView("editor");
+    setStatus("Document opened");
+    editor.focus();
+  }
+
+  function createNewDocument() {
+    if (getEditorText().trim() && !window.confirm("Save this document and create a new one?")) {
+      return;
+    }
+
+    saveDocument();
+    activeDocumentId = `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    documentTitleInput.value = "Untitled document";
+    editor.replaceChildren();
+    resetSuggestions();
+    updateCounts();
+    saveDocument();
+    setView("editor");
+    editor.focus();
+    showToast("New document created.", "success");
+  }
+
+  function deleteDocument(documentId) {
+    const record = documents.find((item) => item.id === documentId);
+    if (!record || !window.confirm(`Delete "${record.title || "Untitled document"}"? This cannot be undone.`)) {
+      return;
+    }
+
+    documents = documents.filter((item) => item.id !== documentId);
+    if (activeDocumentId === documentId) {
+      activeDocumentId = null;
+      documentTitleInput.value = "Untitled document";
+      editor.replaceChildren();
+      resetSuggestions();
+      updateCounts();
+      try {
+        localStorage.setItem(storageKey, "");
+      } catch (error) {
+        console.error("ClearKey could not clear the active document.", error);
+        showToast("The active document could not be cleared from this browser.", "error");
+      }
+    }
+    saveDocumentIndex();
+    renderDocuments();
+    showToast("Document deleted.", "success");
+  }
+
+  function loadDocuments() {
+    try {
+      const savedDocuments = localStorage.getItem(documentsStorageKey);
+      if (savedDocuments !== null) {
+        const parsedDocuments = JSON.parse(savedDocuments);
+        if (!Array.isArray(parsedDocuments)) {
+          throw new Error("Saved documents have an invalid format.");
+        }
+        documents = parsedDocuments.filter((item) => (
+          item
+          && typeof item.id === "string"
+          && typeof item.title === "string"
+          && typeof item.content === "string"
+          && typeof item.updatedAt === "string"
+        ));
+      }
+      activeDocumentId = localStorage.getItem(activeDocumentStorageKey);
+    } catch (error) {
+      console.error("ClearKey could not load documents from local storage.", error);
+      showToast("Saved documents could not be loaded from this browser.", "error");
+      documents = [];
+      activeDocumentId = null;
     }
   }
 
@@ -373,6 +588,76 @@
     }
   }
 
+  async function fetchAvailableModels() {
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) {
+      showToast("Enter an API key before fetching models.", "error");
+      apiKeyInput.focus();
+      return;
+    }
+
+    let endpoint;
+    try {
+      endpoint = getModelsEndpoint();
+    } catch (error) {
+      showToast(error.message, "error");
+      baseUrlInput.focus();
+      return;
+    }
+
+    const button = document.querySelector("#fetch-models");
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = "Fetching…";
+    try {
+      const response = await fetch(endpoint, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${apiKey}` },
+        cache: "no-store",
+        credentials: "omit",
+        redirect: "error"
+      });
+      if (!response.ok) {
+        const providerMessage = getProviderErrorMessage(await response.text());
+        throw new Error(providerMessage
+          ? `Provider error (${response.status}): ${providerMessage}`
+          : `Provider returned HTTP ${response.status}.`);
+      }
+
+      const payload = await response.json();
+      if (!payload || !Array.isArray(payload.data)) {
+        throw new Error("The provider response did not contain a models list.");
+      }
+      fetchedModels = payload.data
+        .map((item) => item && item.id)
+        .filter((id) => typeof id === "string" && id.trim());
+      const modelList = document.querySelector("#available-models");
+      modelList.replaceChildren();
+      fetchedModels.forEach((model) => {
+        const option = document.createElement("option");
+        option.value = model;
+        modelList.append(option);
+      });
+      showToast(
+        fetchedModels.length
+          ? `${fetchedModels.length} models loaded. Select or enter a model.`
+          : "No models were returned by the provider.",
+        fetchedModels.length ? "success" : "error"
+      );
+    } catch (error) {
+      console.error("ClearKey could not fetch the provider's models.", error);
+      showToast(
+        error.name === "TypeError"
+          ? "Network/CORS error while fetching models. Check the URL and provider CORS settings."
+          : error.message || "Could not fetch models.",
+        "error"
+      );
+    } finally {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  }
+
   function createSystemPrompt() {
     const language = languageSelect.value === "auto"
       ? "Detect the input language. Write every explanation in that detected language."
@@ -385,8 +670,8 @@
       "Return STRICT valid JSON only. Do not return markdown, code fences, or any text outside the JSON object.",
       "Use exactly this structure:",
       '{"detected_language":"en","suggestions":[{"id":1,"category":"grammar","original":"exact substring","replacement":"corrected version","explanation":"short explanation in detected language","start":0,"end":10}]}',
-      'Each category must be exactly "grammar", "clarity", or "punctuation".',
-      "Use grammar for grammar, spelling, and incorrect word choice; clarity for awkward or meaningless sentences; punctuation for punctuation.",
+      'Each category must be exactly "grammar", "spelling", "clarity", or "punctuation".',
+      "Use grammar for grammar and incorrect word choice; spelling only for misspelled words and typos; clarity for awkward or meaningless sentences; punctuation for punctuation.",
       "Use unique integer IDs. The original must be an exact substring of the user's text.",
       "start is the zero-based inclusive offset and end is the zero-based exclusive offset, measured in UTF-16 code units in the original text.",
       "Do not overlap suggestions. If no corrections are needed, return an empty suggestions array.",
@@ -463,7 +748,7 @@
       throw new Error("The model response is missing detected_language or the suggestions array.");
     }
 
-    const categories = ["grammar", "clarity", "punctuation"];
+    const categories = ["grammar", "spelling", "clarity", "punctuation"];
     const validSuggestions = [];
     let skippedCount = 0;
 
@@ -597,7 +882,7 @@
       heading.className = "suggestion-card-heading";
       const category = document.createElement("span");
       category.className = `suggestion-category suggestion-category-${suggestion.category}`;
-      category.textContent = suggestion.category;
+      category.textContent = suggestion.category === "spelling" ? "Spelling / Typo" : suggestion.category;
       heading.append(category);
       const suggestionId = document.createElement("small");
       suggestionId.textContent = `#${suggestion.id}`;
@@ -620,7 +905,24 @@
       const explanation = document.createElement("p");
       explanation.className = "suggestion-explanation";
       explanation.textContent = suggestion.explanation;
-      item.append(heading, textPair, explanation);
+      const actions = document.createElement("div");
+      actions.className = "suggestion-card-actions";
+      const applyButton = document.createElement("button");
+      applyButton.type = "button";
+      applyButton.className = "apply-suggestion-button";
+      applyButton.dataset.suggestionKey = suggestion.key;
+      applyButton.dataset.suggestionAction = "apply";
+      applyButton.textContent = "Apply";
+      const ignoreButton = document.createElement("button");
+      ignoreButton.type = "button";
+      ignoreButton.className = "ignore-suggestion-button";
+      ignoreButton.dataset.suggestionKey = suggestion.key;
+      ignoreButton.dataset.suggestionAction = "ignore";
+      ignoreButton.textContent = "Ignore";
+      actions.append(applyButton, ignoreButton);
+      item.dataset.category = suggestion.category;
+      item.classList.add(`suggestion-card-${suggestion.category}`);
+      item.append(heading, textPair, explanation, actions);
       suggestionsList.append(item);
     });
   }
@@ -696,12 +998,13 @@
     suggestions.forEach((suggestion) => {
       const card = document.createElement("section");
       card.className = "popup-suggestion";
+      card.dataset.category = suggestion.category;
 
       const heading = document.createElement("div");
       heading.className = "popup-suggestion-heading";
       const category = document.createElement("span");
       category.className = `suggestion-category suggestion-category-${suggestion.category}`;
-      category.textContent = suggestion.category;
+      category.textContent = suggestion.category === "spelling" ? "Spelling / Typo" : suggestion.category;
       const title = document.createElement("strong");
       title.textContent = `Suggestion #${suggestion.id}`;
       heading.append(category, title);
@@ -1236,6 +1539,27 @@
     testApiKey();
   });
 
+  document.querySelector("#fetch-models").addEventListener("click", fetchAvailableModels);
+
+  document.querySelectorAll("[data-provider-url]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const providerUrl = button.dataset.providerUrl;
+      if (providerUrl) {
+        baseUrlInput.value = providerUrl;
+        saveSettings();
+        document.querySelectorAll("[data-provider-url]").forEach((preset) => {
+          preset.classList.toggle("is-selected", preset === button);
+        });
+        showToast(`${button.textContent} Base URL selected.`, "success");
+      } else {
+        baseUrlInput.focus();
+        document.querySelectorAll("[data-provider-url]").forEach((preset) => {
+          preset.classList.toggle("is-selected", preset === button);
+        });
+      }
+    });
+  });
+
   [
     [baseUrlInput, setupBaseUrlInput],
     [modelNameInput, setupModelNameInput],
@@ -1289,6 +1613,44 @@
   });
 
   tokenPriceInput.addEventListener("input", updateCostSummary);
+  tokenPriceInput.addEventListener("change", updateCostSummary);
+  documentTitleInput.addEventListener("input", () => {
+    document.title = `${documentTitleInput.value.trim() || "Untitled document"} — ClearKey`;
+    saveDocument();
+  });
+
+  documentsNav.addEventListener("click", () => setView("documents"));
+  settingsNav.addEventListener("click", () => setView("settings"));
+  brandHome.addEventListener("click", (event) => {
+    event.preventDefault();
+    setView("editor");
+  });
+  newDocumentButton.addEventListener("click", createNewDocument);
+  emptyNewDocumentButton.addEventListener("click", createNewDocument);
+  documentsGrid.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const deleteButton = target && target.closest("[data-delete-document]");
+    if (deleteButton) {
+      event.stopPropagation();
+      deleteDocument(deleteButton.dataset.deleteDocument);
+      return;
+    }
+    const card = target && target.closest("[data-document-id]");
+    if (card) {
+      openDocument(card.dataset.documentId);
+    }
+  });
+  documentsGrid.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    const card = target && target.closest("[data-document-id]");
+    if (card && target === card) {
+      event.preventDefault();
+      openDocument(card.dataset.documentId);
+    }
+  });
 
   setupCloseButton.addEventListener("click", () => setupModal.close());
   setupSkipButton.addEventListener("click", () => setupModal.close());
@@ -1335,11 +1697,6 @@
     testApiKey(setupTestButton);
   });
 
-  settingsShortcut.addEventListener("click", () => {
-    apiKeyInput.scrollIntoView({ behavior: "smooth", block: "center" });
-    apiKeyInput.focus({ preventScroll: true });
-  });
-
   trySampleButton.addEventListener("click", () => {
     if (getEditorText().trim() && !window.confirm("Replace your current text with the sample paragraph?")) {
       return;
@@ -1361,14 +1718,15 @@
     );
   });
 
-  learnLink.addEventListener("click", (event) => {
-    event.preventDefault();
-    document.querySelector("#privacy-banner").scrollIntoView({ behavior: "smooth", block: "center" });
-    showToast("Your text stays in this browser. Your key goes only to your configured provider.", "success");
-  });
-
   loadSettings();
+  loadDocuments();
   syncSetupFields();
+  const providerPreset = Array.from(document.querySelectorAll("[data-provider-url]"))
+    .find((button) => button.dataset.providerUrl && button.dataset.providerUrl === baseUrlInput.value);
+  const customPreset = document.querySelector('[data-provider-url=""]');
+  document.querySelectorAll("[data-provider-url]").forEach((button) => {
+    button.classList.toggle("is-selected", button === (providerPreset || customPreset));
+  });
   updateCostSummary();
   maybeOpenSetupModal();
 
@@ -1402,7 +1760,10 @@
 
   function saveDocument() {
     try {
-      localStorage.setItem(storageKey, getEditorText());
+      const text = getEditorText();
+      localStorage.setItem(storageKey, text);
+      updateActiveDocumentRecord(text);
+      document.title = `${documentTitleInput.value.trim() || "Untitled document"} — ClearKey`;
       storageErrorLogged = false;
       setStatus("Saved in this browser");
     } catch (error) {
@@ -1556,6 +1917,19 @@
     }
   });
 
+  suggestionsList.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target && target.closest("[data-suggestion-action]");
+    if (!button) {
+      return;
+    }
+    if (button.dataset.suggestionAction === "apply") {
+      applySuggestion(button.dataset.suggestionKey);
+    } else if (button.dataset.suggestionAction === "ignore") {
+      ignoreSuggestion(button.dataset.suggestionKey);
+    }
+  });
+
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (
@@ -1602,8 +1976,19 @@
 
   try {
     const savedDocument = localStorage.getItem(storageKey);
+    const activeRecord = documents.find((item) => item.id === activeDocumentId);
     if (savedDocument !== null) {
       editor.textContent = savedDocument;
+      if (activeRecord) {
+        documentTitleInput.value = activeRecord.title || "Untitled document";
+      } else if (savedDocument.trim()) {
+        activeDocumentId = `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        documentTitleInput.value = "Untitled document";
+      }
+      setStatus("Document restored");
+    } else if (activeRecord) {
+      editor.textContent = activeRecord.content;
+      documentTitleInput.value = activeRecord.title || "Untitled document";
       setStatus("Document restored");
     }
   } catch (error) {
@@ -1611,6 +1996,12 @@
   }
 
   updateCounts();
+  if (activeDocumentId && !documents.some((item) => item.id === activeDocumentId)) {
+    activeDocumentId = null;
+  }
+  if (activeDocumentId) {
+    updateActiveDocumentRecord(getEditorText());
+  }
   window.setInterval(saveDocument, 2000);
   window.addEventListener("pagehide", saveDocument);
 })();
