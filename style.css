@@ -768,11 +768,15 @@ main {
   font-weight: 500;
 }
 
-.suggestion-bulk-actions button:hover,
-.popup-actions button:hover,
+.suggestion-bulk-actions button:not(.apply-all-button):hover,
+.popup-actions button:not(.apply-suggestion-button):hover,
 .popup-dismiss:hover,
-.suggestion-card-actions button:hover {
+.suggestion-card-actions button:not(.apply-suggestion-button):hover {
   background: #f7f7f7;
+}
+
+.apply-suggestion-button:hover {
+  filter: brightness(.80);
 }
 
 .suggestion-bulk-actions .apply-all-button,
